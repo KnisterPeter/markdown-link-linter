@@ -24,7 +24,10 @@ export function createUrl(fragment, base) {
   }
 }
 
-function remarkLinkChecker() {
+/**
+ * @param {{error: boolean}} options
+ */
+function remarkLinkChecker({ error }) {
   const slugger = new GithubSlugger();
   const stop = new Error();
 
@@ -112,23 +115,27 @@ function remarkLinkChecker() {
    * @param {VFile} file
    */
   function createIssue(message, node, file) {
+    const type = error ? "error" : "warning";
     const { line, column } = node.position?.start ?? {};
     const { line: endLine, column: endColumn } = node.position?.end ?? {};
     console.log(
-      `::warning file=${file.path},line=${line},col=${column},endLine=${endLine},endColumn=${endColumn}::${message}`,
+      `::${type} file=${file.path},line=${line},col=${column},endLine=${endLine},endColumn=${endColumn}::${message}`,
     );
     throw stop;
   }
 }
 
 function main() {
-  const linkCheckerPipeline = unified().use(remarkParse).use(remarkLinkChecker);
-
   sade(pkg.name)
     .version(pkg.version)
     .option("--ignore", "Glob of files to ignore")
+    .option("--error", "Emit error instead of warning")
     .command("run <glob>")
     .action((args, opts) => {
+      const linkCheckerPipeline = unified()
+        .use(remarkParse)
+        .use(remarkLinkChecker, { error: opts.error ?? false });
+
       const ignoredFiles = (opts.ignore ? Fs.globSync(opts.ignore) : []).map(
         (path) => Path.join(process.cwd(), path),
       );
