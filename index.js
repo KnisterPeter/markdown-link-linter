@@ -53,7 +53,9 @@ function remarkLinkChecker() {
       /** @type {URL} */
       let url;
       try {
-        url = createUrl(node.url, file.dirname ?? file.cwd);
+        let fragment = node.url;
+        if (fragment.startsWith("#")) fragment = `${file.basename}${fragment}`;
+        url = createUrl(fragment, file.dirname ?? file.cwd);
       } catch (err) {
         console.warn(`::error file=${file.path}::${String(err)}`);
         throw stop;
@@ -133,7 +135,8 @@ function main() {
 
       if (!Array.isArray(args)) args = [args];
       let glob = args?.[0] ?? "**/*.md";
-      if (glob === ".") glob = "**/*.md";
+      const stat = Fs.statSync(glob);
+      if (stat.isDirectory()) glob = Path.join(glob, "**/*.md");
 
       for (const ent of Fs.globSync(glob, {
         withFileTypes: true,
