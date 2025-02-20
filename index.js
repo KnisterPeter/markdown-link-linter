@@ -25,9 +25,9 @@ export function createUrl(fragment, base) {
 }
 
 /**
- * @param {{error: boolean}} options
+ * @param {{results: {foundIssues: boolean}, error: boolean}} options
  */
-function remarkLinkChecker({ error }) {
+function remarkLinkChecker({ results, error }) {
   const slugger = new GithubSlugger();
   const stop = new Error();
 
@@ -61,6 +61,7 @@ function remarkLinkChecker({ error }) {
         url = createUrl(fragment, file.dirname ?? file.cwd);
       } catch (err) {
         console.warn(`::error file=${file.path}::${String(err)}`);
+        results.foundIssues = true;
         throw stop;
       }
 
@@ -121,6 +122,7 @@ function remarkLinkChecker({ error }) {
     console.log(
       `::${type} file=${file.path},line=${line},col=${column},endLine=${endLine},endColumn=${endColumn}::${message}`,
     );
+    results.foundIssues = true;
     throw stop;
   }
 }
@@ -129,12 +131,15 @@ function main() {
   sade(pkg.name)
     .version(pkg.version)
     .option("--ignore", "Glob of files to ignore")
-    .option("--error", "Emit error instead of warning")
+    .option("--error", "Emit error instead of warning", false)
+    .option("--fail-on-issue", "Fail process if issues are found", false)
     .command("run <glob>")
     .action((args, opts) => {
+      const results = { foundIssues: false };
+
       const linkCheckerPipeline = unified()
         .use(remarkParse)
-        .use(remarkLinkChecker, { error: opts.error ?? false });
+        .use(remarkLinkChecker, { results, error: opts.error ?? false });
 
       const ignoredFiles = (opts.ignore ? Fs.globSync(opts.ignore) : []).map(
         (path) => Path.join(process.cwd(), path),
@@ -156,6 +161,10 @@ function main() {
           value: Fs.readFileSync(path, "utf8"),
         });
         linkCheckerPipeline.runSync(linkCheckerPipeline.parse(file), file);
+      }
+
+      if (opts["fail-on-issue"] && results.foundIssues) {
+        process.exit(1);
       }
     })
     .parse(process.argv);
