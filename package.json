@@ -12,7 +12,8 @@
   "bin": "./index.js",
   "scripts": {
     "start": "node ./index.js",
-    "fmt": "prettier --write ."
+    "fmt": "prettier --write .",
+    "test": "node --test"
   },
   "dependencies": {
     "remark-parse": "^11.0.0",
