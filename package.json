@@ -1,6 +1,6 @@
 {
   "name": "markdown-link-linter",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "",
   "keywords": [
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "remark-parse": "^11.0.0",
+    "sade": "^1.8.1",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0",
     "vfile": "^6.0.3"
