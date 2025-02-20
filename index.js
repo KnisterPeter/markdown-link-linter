@@ -1,6 +1,5 @@
-/**
- * @typedef {import("mdast").Link} Link
- */
+import GithubSlugger from "github-slugger";
+import { toString as mdAstToString } from "mdast-util-to-string";
 import Fs from "node:fs";
 import Path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,39 +24,103 @@ export function createUrl(fragment, base) {
   }
 }
 
-/**
- * @param {Link} node
- * @param {VFile} file
- */
-function linkChecker(node, file) {
-  /** @type {URL} */
-  let url;
-  try {
-    url = createUrl(node.url, file.dirname ?? file.cwd);
-  } catch (err) {
-    console.warn(`::error file=${file.path}::${String(err)}`);
-    return;
+function remarkLinkChecker() {
+  const slugger = new GithubSlugger();
+  const stop = new Error();
+
+  return remarkLinkChecker;
+
+  /**
+   *
+   * @param {import("mdast").Node} tree
+   * @param {VFile} file
+   */
+  function remarkLinkChecker(tree, file) {
+    visit(tree, "link", (node) => {
+      try {
+        linkChecker(node, file);
+      } catch (err) {
+        if (err === stop) return;
+        throw err;
+      }
+    });
+
+    /**
+     * @param {import("mdast").Link} node
+     * @param {VFile} file
+     */
+    function linkChecker(node, file) {
+      /** @type {URL} */
+      let url;
+      try {
+        url = createUrl(node.url, file.dirname ?? file.cwd);
+      } catch (err) {
+        console.warn(`::error file=${file.path}::${String(err)}`);
+        throw stop;
+      }
+
+      // exclude external links
+      if (url.protocol !== "file:") return;
+
+      const path = fileURLToPath(url);
+      if (!Fs.existsSync(path))
+        createIssue(`Invalid link to ${node.url} (file not found)`, node, file);
+
+      if (url.hash) checkSlug(path, url.hash.slice(1), node, file);
+    }
   }
 
-  if (url.protocol !== "file:") return;
+  /**
+   *
+   * @param {string} path
+   * @param {string} slug
+   * @param {import("mdast").Link} node
+   * @param {VFile} file
+   */
+  function checkSlug(path, slug, node, file) {
+    slugger.reset();
+    /** @type {string[]} */
+    const slugs = [];
 
-  const path = fileURLToPath(url);
-  if (!Fs.existsSync(path)) {
+    const linkedFile = new VFile({
+      path,
+      value: Fs.readFileSync(path, "utf8"),
+    });
+    const pipeline = unified()
+      .use(remarkParse)
+      .use(() => (tree) => {
+        visit(tree, "heading", (node) => {
+          slugs.push(slugger.slug(mdAstToString(node)));
+        });
+      });
+    pipeline.runSync(pipeline.parse(linkedFile), linkedFile);
+
+    if (!slugs.includes(slug)) {
+      return createIssue(
+        `Invalid link to ${node.url} (slug not found)`,
+        node,
+        file,
+      );
+    }
+  }
+
+  /**
+   * @param {string} message
+   * @param {import("mdast").Link} node
+   * @param {VFile} file
+   */
+  function createIssue(message, node, file) {
     const { line, column } = node.position?.start ?? {};
     const { line: endLine, column: endColumn } = node.position?.end ?? {};
     console.log(
-      `::warning file=${file.path},line=${line},col=${column},endLine=${endLine},endColumn=${endColumn}::Invalid link to ${node.url}`,
+      `::warning file=${file.path},line=${line},col=${column},endLine=${endLine},endColumn=${endColumn}::${message}`,
     );
+    throw stop;
   }
 }
 
 function main() {
-  const pipeline = unified()
-    .use(remarkParse)
-    .use(
-      () => (tree, file) =>
-        visit(tree, "link", (node) => linkChecker(node, file)),
-    );
+  const linkCheckerPipeline = unified().use(remarkParse).use(remarkLinkChecker);
 
   sade(pkg.name)
     .version(pkg.version)
@@ -82,7 +145,7 @@ function main() {
           path,
           value: Fs.readFileSync(path, "utf8"),
         });
-        pipeline().runSync(pipeline().parse(file), file);
+        linkCheckerPipeline.runSync(linkCheckerPipeline.parse(file), file);
       }
     })
     .parse(process.argv);
