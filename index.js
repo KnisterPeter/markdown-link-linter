@@ -1,4 +1,5 @@
 import GithubSlugger from "github-slugger";
+import { globSync } from "glob";
 import { toString as mdAstToString } from "mdast-util-to-string";
 import Fs from "node:fs";
 import Path from "node:path";
@@ -9,7 +10,6 @@ import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { VFile } from "vfile";
 import pkg from "./package.json" with { type: "json" };
-import { globbySync } from "globby";
 
 /**
  * @param {string} fragment
@@ -147,9 +147,15 @@ function main() {
       const stat = Fs.statSync(glob);
       if (stat.isDirectory()) glob = Path.join(glob, "**/*.md");
 
-      for (const path of globbySync(glob, {
+      let ignore = ["**/node_modules/**"];
+      if (opts.ignore) {
+        if (!Array.isArray(opts.ignore)) opts.ignore = [opts.ignore];
+        ignore.push(...opts.ignore);
+      }
+
+      for (const path of globSync(glob, {
+        ignore,
         absolute: true,
-        ignore: opts.ignore,
       })) {
         const file = new VFile({
           path,
