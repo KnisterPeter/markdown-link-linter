@@ -9,6 +9,7 @@ import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { VFile } from "vfile";
 import pkg from "./package.json" with { type: "json" };
+import { globbySync } from "globby";
 
 /**
  * @param {string} fragment
@@ -141,21 +142,15 @@ function main() {
         .use(remarkParse)
         .use(remarkLinkChecker, { results, error: opts.error ?? false });
 
-      const ignoredFiles = (opts.ignore ? Fs.globSync(opts.ignore) : []).map(
-        (path) => Path.join(process.cwd(), path),
-      );
-
       if (!Array.isArray(args)) args = [args];
       let glob = args?.[0] ?? "**/*.md";
       const stat = Fs.statSync(glob);
       if (stat.isDirectory()) glob = Path.join(glob, "**/*.md");
 
-      for (const ent of Fs.globSync(glob, {
-        withFileTypes: true,
-        exclude: (file) =>
-          ignoredFiles.includes(Path.join(file.parentPath, file.name)),
+      for (const path of globbySync(glob, {
+        absolute: true,
+        ignore: opts.ignore,
       })) {
-        const path = Path.join(ent.parentPath, ent.name);
         const file = new VFile({
           path,
           value: Fs.readFileSync(path, "utf8"),
